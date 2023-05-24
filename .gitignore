@@ -1,0 +1,13 @@
+.vs/
+/x64
+**ipch
+**_DEBUG_
+**_RELEASE_
+*.suo
+*.sdf
+*.user
+*.opensdf
+*.log
+*.exe
+*.dll
+*.pdb
