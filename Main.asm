@@ -60,6 +60,8 @@ srand proto
 rand proto
 time proto
 PlaySound proto
+fopen proto
+fscanf proto
 
 ; OpenGL
 glShadeModel proto
@@ -88,6 +90,7 @@ glColor3f proto
 glPointSize proto
 glLineWidth proto
 
+includelib legacy_stdio_definitions.lib
 includelib libcmtd.lib
 includelib vcruntime.lib
 includelib ucrt.lib
@@ -272,9 +275,9 @@ WRAPPER_EFFECT ends
 .data
 
 ; Main
-WINDOW_WIDTH equ 1920
-WINDOW_HEIGHT equ 1080
-FULLSCREEN equ 1
+WINDOW_WIDTH dword 1920
+WINDOW_HEIGHT dword 1080
+FULLSCREEN byte 1
 
 ; Register class
 CS_HREDRAW equ 2h
@@ -295,7 +298,7 @@ devMode DEVMODEA <>
 ; Rectangle
 SM_CXSCREEN equ 0
 SM_CYSCREEN equ 1
-windowRect RECT <0, 0, WINDOW_WIDTH, WINDOW_HEIGHT>
+windowRect RECT <0, 0, 0, 0>
 
 ; Pixel format descriptor
 PFD_DRAW_TO_WINDOW equ 4h
@@ -335,6 +338,9 @@ WM_KEYDOWN equ 100h
 WM_KEYUP equ 101h
 msg MESSAGE <>
 randSeed dd 0
+configName db "Settings.cfg", 0
+readingMode db "r", 0
+readConfig db "Fullscreen: %hhd WindowWidth: %hu WindowHeight: %hu", 0
 
 ; Keys
 KEY_ESCAPE equ 1Bh
@@ -459,12 +465,32 @@ unregisterClassError db "Could not unregister the window class!", 0
 ;   WinMainCRTStartup
 ;================================================
 WinMainCRTStartup proc
+        local file:dq
         sub rsp, 28h
+
+        ; Reads config from the disk
+        lea rcx, configName
+        lea rdx, readingMode
+        call fopen
+        mov file, rax
+        test rax, rax
+        jz configNotFound
+        mov rcx, file
+        lea rdx, readConfig
+        lea r8, FULLSCREEN
+        lea r9, WINDOW_WIDTH
+        lea rax, WINDOW_HEIGHT
+        push rax
+        sub rsp, 20h
+        call fscanf
+        add rsp, 28h
+configNotFound:
+
         call InitWindow
         test rax, rax
         jnz kill
-        mov rax, FULLSCREEN
-        test rax, rax
+        mov al, FULLSCREEN
+        test al, al
         mov rdx, SW_MAXIMIZE
         jnz @f
         mov rdx, SW_NORMAL
@@ -724,8 +750,8 @@ bulletsFor:
         ; Right border
         movss xmm0, (BULLET ptr [rdx + rax]).pos.x
         push rax
-        mov rax, WINDOW_WIDTH
-        cvtsi2ss xmm1, rax
+        mov eax, WINDOW_WIDTH
+        cvtsi2ss xmm1, eax
         pop rax
         comiss xmm0, xmm1
         ja @f
@@ -737,8 +763,8 @@ bulletsFor:
         ; Bottom border
         movss xmm0, (BULLET ptr [rdx + rax]).pos.y
         push rax
-        mov rax, WINDOW_HEIGHT
-        cvtsi2ss xmm1, rax
+        mov eax, WINDOW_HEIGHT
+        cvtsi2ss xmm1, eax
         pop rax
         comiss xmm0, xmm1
         ja @f
@@ -1086,8 +1112,8 @@ WarpPosition proc
         xorps xmm1, xmm1
         comiss xmm0, xmm1
         ja @f
-        mov rax, WINDOW_WIDTH
-        cvtsi2ss xmm0, rax
+        mov eax, WINDOW_WIDTH
+        cvtsi2ss xmm0, eax
         addss xmm0, xmm2
         movss (POINTF ptr [rcx]).x, xmm0
         jmp horWarpDone
@@ -1097,8 +1123,8 @@ WarpPosition proc
         cvtsi2ss xmm2, rdx
         movss xmm0, (POINTF ptr [rcx]).x
         subss xmm0, xmm2
-        mov rax, WINDOW_WIDTH
-        cvtsi2ss xmm1, rax
+        mov eax, WINDOW_WIDTH
+        cvtsi2ss xmm1, eax
         comiss xmm0, xmm1
         jb @f
         xorps xmm0, xmm0
@@ -1112,8 +1138,8 @@ horWarpDone:
         cvtsi2ss xmm2, rdx
         movss xmm0, (POINTF ptr [rcx]).y
         subss xmm0, xmm2
-        mov rax, WINDOW_HEIGHT
-        cvtsi2ss xmm1, rax
+        mov eax, WINDOW_HEIGHT
+        cvtsi2ss xmm1, eax
         comiss xmm0, xmm1
         jb @f
         xorps xmm0, xmm0
@@ -1129,8 +1155,8 @@ horWarpDone:
         xorps xmm1, xmm1
         comiss xmm0, xmm1
         ja @f
-        mov rax, WINDOW_HEIGHT
-        cvtsi2ss xmm0, rax
+        mov eax, WINDOW_HEIGHT
+        cvtsi2ss xmm0, eax
         addss xmm0, xmm2
         movss (POINTF ptr [rcx]).y, xmm0
         jmp verWarpDone
@@ -1766,7 +1792,7 @@ asteroidsFor:
         ; Generates the x-coordinate position
         push rcx
         mov rcx, 0
-        mov rdx, WINDOW_WIDTH
+        mov edx, WINDOW_WIDTH
         sub rsp, 28h
         call Rand
         add rsp, 28h
@@ -1776,7 +1802,7 @@ asteroidsFor:
         ; Generates the y-coordinate position
         push rcx
         mov rcx, 0
-        mov rdx, WINDOW_HEIGHT
+        mov edx, WINDOW_HEIGHT
         sub rsp, 28h
         call Rand
         add rsp, 28h
@@ -1861,6 +1887,10 @@ Rand endp
 ;================================================
 InitWindow proc
         sub rsp, 28h
+        mov ecx, WINDOW_WIDTH
+        mov windowRect.right, ecx
+        mov ecx, WINDOW_HEIGHT
+        mov windowRect.bottom, ecx
 
         ; Gets an instance
         xor rcx, rcx
@@ -1894,16 +1924,18 @@ InitWindow proc
 @@:
 
         ; Screen resolution switching
-        mov rax, FULLSCREEN
-        test rax, rax
+        mov al, FULLSCREEN
+        test al, al
         jz @f
         lea rcx, devMode
         xor rdx, rdx
         mov r8, sizeof DEVMODEA
         call memset
         mov devMode.dmSize, sizeof DEVMODEA
-        mov devMode.dmPelsWidth, WINDOW_WIDTH
-        mov devMode.dmPelsHeight, WINDOW_HEIGHT
+        mov eax, WINDOW_WIDTH
+        mov devMode.dmPelsWidth, eax
+        mov eax, WINDOW_HEIGHT
+        mov devMode.dmPelsHeight, eax
         mov devMode.dmBitsPerPel, 32
         mov devMode.dmFields, DM_PELSWIDTH or DM_PELSHEIGHT or DM_BITSPERPEL
         lea rcx, devMode
@@ -1912,8 +1944,8 @@ InitWindow proc
 @@:
 
         ; Adjusts a window to true requested size
-        mov rax, FULLSCREEN
-        test rax, rax
+        mov al, FULLSCREEN
+        test al, al
         mov rdx, dwFullscreenStyle
         mov r9, dwExFullscreenStyle
         jnz @f
@@ -1938,7 +1970,7 @@ InitWindow proc
         sub rsp, 30h
         call GetSystemMetrics
         add rsp, 30h
-        sub rax, WINDOW_HEIGHT
+        sub eax, WINDOW_HEIGHT
         mov rcx, 2
         xor rdx, rdx
         div rcx
@@ -1947,13 +1979,13 @@ InitWindow proc
         sub rsp, 28h
         call GetSystemMetrics
         add rsp, 28h
-        sub rax, WINDOW_WIDTH
+        sub eax, WINDOW_WIDTH
         mov rcx, 2
         xor rdx, rdx
         div rcx
         push rax
-        mov rax, FULLSCREEN
-        test rax, rax
+        mov al, FULLSCREEN
+        test al, al
         mov r9, WS_CLIPSIBLINGS or WS_CLIPCHILDREN or dwFullscreenStyle
         jnz @f
         mov r9, WS_CLIPSIBLINGS or WS_CLIPCHILDREN or dwStyle
@@ -2048,11 +2080,11 @@ InitWindow proc
         call glLoadIdentity
         push qword ptr [GL_FAR]
         push qword ptr [GL_NEAR]
-        mov rax, WINDOW_HEIGHT
-        cvtsi2sd xmm3, rax
+        mov eax, WINDOW_HEIGHT
+        cvtsi2sd xmm3, eax
         xorps xmm2, xmm2
-        mov rax, WINDOW_WIDTH
-        cvtsi2sd xmm1, rax
+        mov eax, WINDOW_WIDTH
+        cvtsi2sd xmm1, eax
         xorps xmm0, xmm0
         sub rsp, 20h
         call glOrtho
@@ -2075,8 +2107,8 @@ KillWindow proc
         sub rsp, 28h
 
         ; Sets screen resolution back to the original
-        mov rax, FULLSCREEN
-        test rax, rax
+        mov al, FULLSCREEN
+        test al, al
         jz @f
         xor rcx, rcx
         xor rdx, rdx
