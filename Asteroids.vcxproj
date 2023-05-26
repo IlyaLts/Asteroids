@@ -81,6 +81,12 @@
       <FileType>CppCode</FileType>
     </MASM>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="Resources\Icon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Resources\Main.rc" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
