@@ -54,6 +54,8 @@ ValidateRect proto
 DefWindowProcA proto
 SwapBuffers proto
 memset proto
+strcat proto
+strrchr proto
 sinf proto
 cosf proto
 srand proto
@@ -62,6 +64,7 @@ time proto
 PlaySound proto
 fopen proto
 fscanf proto
+GetModuleFileNameA proto
 
 ; OpenGL
 glShadeModel proto
@@ -337,10 +340,12 @@ WM_PAINT equ 0fh
 WM_KEYDOWN equ 100h
 WM_KEYUP equ 101h
 msg MESSAGE <>
+PATH_SIZE equ 512
+absolutePath db PATH_SIZE dup (0)
 randSeed dd 0
 configName db "Settings.cfg", 0
 readingMode db "r", 0
-readConfig db "Fullscreen: %hhd WindowWidth: %hu WindowHeight: %hu", 0
+readConfig db "Fullscreen: %hhd Width: %hu Height: %hu Sound: %hhd", 0
 
 ; Keys
 KEY_ESCAPE equ 1Bh
@@ -434,14 +439,19 @@ MAX_EFFECTS equ MAX_ASTEROIDS + 1
 effects WRAPPER_EFFECT MAX_EFFECTS dup ({})
 
 ; Sound - Unfortunately, PlaySound doesn't support mixing sounds
+SOUND_ENABLED byte 1
 SND_FILENAME equ 20000h
 SND_ASYNC equ 1h
 SND_NODEFAULT equ 2h
 SND_FLAGS equ SND_FILENAME or SND_ASYNC or SND_NODEFAULT
-rocketEngine byte "C:\\RocketEngine.wav", 0
-blaster byte "c:\\Blaster.wav", 0
-shipExplosion byte "c:\\ShipExplosion.wav", 0
-asteroidExplosion byte "c:\\AsteroidExplosion.wav", 0
+rocketEngine byte "Sounds\RocketEngine.wav", 0
+blaster byte "Sounds\Blaster.wav", 0
+shipExplosion byte "Sounds\ShipExplosion.wav", 0
+asteroidExplosion byte "Sounds\AsteroidExplosion.wav", 0
+rocketEnginePath byte PATH_SIZE dup (0)
+blasterPath byte PATH_SIZE dup (0)
+shipExplosionPath byte PATH_SIZE dup (0)
+asteroidExplosionPath byte PATH_SIZE dup (0)
 
 ; Error messages
 errorTitle db "An error occurred!", 0
@@ -468,6 +478,41 @@ WinMainCRTStartup proc
         local file:dq
         sub rsp, 28h
 
+        ; Gets the absolute path of sound files
+        mov rcx, 0
+        lea rdx, absolutePath
+        mov r8, PATH_SIZE
+        call GetModuleFileNameA
+        lea rcx, absolutePath
+        mov rdx, '\\'
+        call strrchr
+        mov cx, 0
+        mov [rax + 1], cx
+        lea rcx, rocketEnginePath
+        lea rdx, absolutePath
+        call strcat
+        lea rcx, rocketEnginePath
+        lea rdx, rocketEngine
+        call strcat
+        lea rcx, blasterPath
+        lea rdx, absolutePath
+        call strcat
+        lea rcx, blasterPath
+        lea rdx, blaster
+        call strcat
+        lea rcx, shipExplosionPath
+        lea rdx, absolutePath
+        call strcat
+        lea rcx, shipExplosionPath
+        lea rdx, shipExplosion
+        call strcat
+        lea rcx, asteroidExplosionPath
+        lea rdx, absolutePath
+        call strcat
+        lea rcx, asteroidExplosionPath
+        lea rdx, asteroidExplosion
+        call strcat
+
         ; Reads config from the disk
         lea rcx, configName
         lea rdx, readingMode
@@ -475,17 +520,20 @@ WinMainCRTStartup proc
         mov file, rax
         test rax, rax
         jz configNotFound
-        mov rcx, file
-        lea rdx, readConfig
-        lea r8, FULLSCREEN
-        lea r9, WINDOW_WIDTH
+        lea rax, SOUND_ENABLED
+        push rax
         lea rax, WINDOW_HEIGHT
         push rax
+        lea r9, WINDOW_WIDTH
+        lea r8, FULLSCREEN
+        lea rdx, readConfig
+        mov rcx, file
         sub rsp, 20h
         call fscanf
-        add rsp, 28h
+        add rsp, 30h
 configNotFound:
 
+        ; Initializes the game
         call InitWindow
         test rax, rax
         jnz kill
@@ -648,7 +696,11 @@ noRestartNeeded:
         movss xmm1, [ship.vel.y]
         addss xmm1, xmm0
         movss [ship.vel.y], xmm1
-        ;lea rcx, rocketEngine
+        ; Plays rocket engine sound if enabled
+        ;mov al, SOUND_ENABLED
+        ;test al, al
+        ;jz @f
+        ;lea rcx, rocketEnginePath
         ;mov rdx, 0
         ;mov r8d, SND_FLAGS
         ;call PlaySound
@@ -708,10 +760,15 @@ bulletsWhile:
         addss xmm0, xmm1
         movss (BULLET ptr [rdx + rax]).pos.y, xmm0
         mov (BULLET ptr [rdx + rax]).active, 1
-        ;lea rcx, blaster
-        ;mov rdx, 0
-        ;mov r8d, SND_FLAGS
-        ;call PlaySound
+        ; Plays blaster sound if enabled
+        mov al, SOUND_ENABLED
+        test al, al
+        jz @f
+        lea rcx, blasterPath
+        mov rdx, 0
+        mov r8d, SND_FLAGS
+        call PlaySound
+@@:
 shootingEnd:
 noShip:
 
@@ -841,7 +898,7 @@ sizeChosen:
         ; Destroys the ship if it collides with an asteroid
         mov al, ship.destroyed
         test al, al
-        jnz @f
+        jnz shipNotCollided
         push rcx
         sub rsp, 20h
         mov rax, sizeof ASTEROID
@@ -855,19 +912,23 @@ sizeChosen:
         add rsp, 20h
         pop rcx
         test rax, rax
-        jz @f
+        jz shipNotCollided
         mov ship.destroyed, 1
         push rcx
         lea rcx, ship.pos
         sub rsp, 20h
         call SpawnParticle
-        ;lea rcx, shipExplosion
-        ;mov rdx, 0
-        ;mov r8d, SND_FLAGS
-        ;call PlaySound
-        add rsp, 20h
+        ; Plays ship explosion sound if enabled
+        mov al, SOUND_ENABLED
+        test al, al
+        jz @f
+        lea rcx, shipExplosionPath
+        mov rdx, 0
+        mov r8d, SND_FLAGS
+        call PlaySound
+@@:     add rsp, 20h
         pop rcx
-@@:
+shipNotCollided:
         ; Iterates over bullets to check for collisions
         push rcx
         xor rcx, rcx
@@ -959,11 +1020,15 @@ breakUpDone:
         call memset
         lea rdx, asteroids
         mov (ASTEROID ptr [rdx + r12]).active, 0
-        ; Plays explosion sound
-        ;lea rcx, asteroidExplosion
+        ; Plays asteroid explosion sound if enabled
+        ;mov al, SOUND_ENABLED
+        ;test al, al
+        ;jz @f
+        ;lea rcx, asteroidExplosionPath
         ;mov rdx, 0
         ;mov r8d, SND_FLAGS
         ;call PlaySound
+;@@:
         add rsp, 20h
         pop rcx
 notCollided:
