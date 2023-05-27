@@ -1968,7 +1968,7 @@ InitWindow proc
         mov wc.lpfnWndProc, rax
         mov rax, hInstance
         mov wc.hInstance, rax
-        xor rcx, rcx
+        lea rcx, hInstance
         mov rdx, IDI_APPLICATION
         call LoadIconA
         mov wc.hIcon, rax
