@@ -65,6 +65,7 @@ PlaySound proto
 fopen proto
 fscanf proto
 GetModuleFileNameA proto
+timeGetTime proto
 
 ; OpenGL
 glShadeModel proto
@@ -260,7 +261,7 @@ BULLET struct 8
         pos POINTF <0.0, 0.0>
 BULLET ends
 
-MAX_PARTICLES equ 50
+MAX_PARTICLES equ 80
 
 EFFECT struct 8
         time dd ?
@@ -346,6 +347,9 @@ randSeed dd 0
 configName db "Settings.cfg", 0
 readingMode db "r", 0
 readConfig db "Fullscreen: %hhd Width: %hu Height: %hu Sound: %hhd", 0
+MS2SEC dd 0.001
+deltaTime dd 0
+lastFrameTime dd 0
 
 ; Keys
 KEY_ESCAPE equ 1Bh
@@ -354,7 +358,6 @@ KEY_LEFT equ 25h
 KEY_UP equ 26h
 KEY_RIGHT equ 27h
 KEY_DOWN equ 28h
-KEY_R equ 52h
 keys byte 256 dup (0)
 keysPressed byte 256 dup (0)
 
@@ -382,8 +385,8 @@ BACKGROUND_COLOR_B dd 0.0
 BACKGROUND_COLOR_A dd 1.0
 
 ; SHIP
-SHIP_MOVE_SPEED dd 0.05
-SHIP_ROTATION_SPEED dd 2.0
+SHIP_MOVE_SPEED dd 2.5
+SHIP_ROTATION_SPEED dd 100.0
 SHIP_FORWARD_SIZE dd 15
 SHIP_BACK_SIZE dd 5
 SHIP_BACKSIDE_SIZE dd 15
@@ -398,15 +401,11 @@ SHIP_COLOR_B dd 1.0
 SHIP_PLUME_COLOR_R dd 1.0
 SHIP_PLUME_COLOR_G dd 0.75
 SHIP_PLUME_COLOR_B dd 0.0
-SHIP_MOVE_FREQ dd 50
-SHIP_MOVE_DUR dd 20
-SHIP_SHOOT_FREQ dd 150
-SHIP_SHOOT_DUR dd 40
 ship SHIP <0, 0>
 
 ; Asteroids
-ASTEROID_MAX_SPEED dd 3
-ASTEROID_MAX_ROTATION_SPEED dd 1.0
+ASTEROID_MAX_SPEED dd 250
+ASTEROID_MAX_ROTATION_SPEED dd 150.0
 ASTEROID_THICKNESS dd 4
 ASTEROID_COLOR_R dd 1.0
 ASTEROID_COLOR_G dd 1.0
@@ -423,14 +422,14 @@ MAX_ASTEROIDS equ MAX_BIG_ASTEROIDS * 2 * 3
 asteroids ASTEROID MAX_ASTEROIDS dup ({0, 0.0, 0.0})
 
 ; Bullets
-BULLET_SPEED dd 10.0
+BULLET_SPEED dd 500.0
 BULLET_SIZE dd 3
 MAX_BULLETS equ 30
 bullets BULLET MAX_BULLETS dup ({0})
 
 ; Effects
-EFFECT_MAX_SPEED dd 2.0
-EFFECT_TIME equ 100
+EFFECT_MAX_SPEED dd 80.0
+EFFECT_TIME dd 1.5
 EFFECT_SIZE dd 2
 EFFECT_COLOR_R dd 1.0
 EFFECT_COLOR_G dd 1.0
@@ -553,6 +552,9 @@ configNotFound:
         mov rcx, 1
         call SetCursor
         call RestartGame
+        call timeGetTime
+        cvtsi2ss xmm0, eax
+        movss lastFrameTime, xmm0
 
 mainLoop:
         lea rcx, msg
@@ -576,6 +578,16 @@ mainLoop:
         jmp mainLoop
 update: call Update
         call Draw
+        ; Calculates delta time
+        call timeGetTime
+        cvtsi2ss xmm0, eax
+        movss xmm2, xmm0
+        movss xmm1, lastFrameTime
+        subss xmm0, xmm1
+        movss lastFrameTime, xmm2
+        movss xmm1, MS2SEC
+        mulss xmm0, xmm1
+        movss deltaTime, xmm0
         jmp mainLoop
 
 kill:   call KillWindow
@@ -641,10 +653,14 @@ noRestartNeeded:
         ; Updates the ship
         mov ship.accelerating, 0
         movss xmm1, [ship.vel.x]
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, [ship.pos.x]
         addss xmm0, xmm1
         movss [ship.pos.x], xmm0
         movss xmm1, [ship.vel.y]
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, [ship.pos.y]
         addss xmm0, xmm1
         movss [ship.pos.y], xmm0
@@ -658,7 +674,10 @@ noRestartNeeded:
         cmp al, 1
         jne @f
         movss xmm0, ship.rot
-        subss xmm0, SHIP_ROTATION_SPEED
+        movss xmm1, SHIP_ROTATION_SPEED
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
+        subss xmm0, xmm1
         movss [ship.rot], xmm0
 @@:
 
@@ -668,7 +687,10 @@ noRestartNeeded:
         cmp al, 1
         jne @f
         movss xmm0, ship.rot
-        addss xmm0, SHIP_ROTATION_SPEED
+        movss xmm1, SHIP_ROTATION_SPEED
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
+        addss xmm0, xmm1
         movss [ship.rot], xmm0
 @@:
 
@@ -786,10 +808,14 @@ bulletsFor:
         ; Updates bullet positions
         lea rdx, bullets
         movss xmm1, (BULLET ptr [rdx + rax]).vel.x
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, (BULLET ptr [rdx + rax]).pos.x
         addss xmm0, xmm1
         movss (BULLET ptr [rdx + rax]).pos.x, xmm0
         movss xmm1, (BULLET ptr [rdx + rax]).vel.y
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, (BULLET ptr [rdx + rax]).pos.y
         addss xmm0, xmm1
         movss (BULLET ptr [rdx + rax]).pos.y, xmm0
@@ -877,13 +903,20 @@ sizeChosen:
         mul rcx
         lea rdx, asteroids
         movss xmm0, (ASTEROID ptr [rdx + rax]).rot
-        addss xmm0, (ASTEROID ptr [rdx + rax]).rotSpeed
+        movss xmm1, (ASTEROID ptr [rdx + rax]).rotSpeed
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
+        addss xmm0, xmm1
         movss (ASTEROID ptr [rdx + rax]).rot, xmm0
         movss xmm1, (ASTEROID ptr [rdx + rax]).vel.x
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, (ASTEROID ptr [rdx + rax]).pos.x
         addss xmm0, xmm1
         movss (ASTEROID ptr [rdx + rax]).pos.x, xmm0
         movss xmm1, (ASTEROID ptr [rdx + rax]).vel.y
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, (ASTEROID ptr [rdx + rax]).pos.y
         addss xmm0, xmm1
         movss (ASTEROID ptr [rdx + rax]).pos.y, xmm0
@@ -1052,19 +1085,22 @@ effectsFor:
         mul rcx
         lea rdx, effects
         ; Checks if an effect has life time left
-        mov edx, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
-        test edx, edx
-        jnz @f
+        movss xmm0, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
+        xorps xmm1, xmm1
+        comiss xmm0, xmm1
+        ja @f
         add rcx, 1
         jmp effectsFor
-        ; If so, decrease its life time by 1
+        ; If so, decrease its lifetime by deltaTime
 @@:     push rcx
         push r12
         push r13
         mov rax, sizeof WRAPPER_EFFECT
         mul rcx
         lea rdx, effects
-        dec (WRAPPER_EFFECT ptr [rdx + rax]).data.time
+        movss xmm0, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
+        subss xmm0, deltaTime
+        movss (WRAPPER_EFFECT ptr [rdx + rax]).data.time, xmm0
         ; Then, updates its particle positions
         lea r12, (WRAPPER_EFFECT ptr [rdx + rax]).data.vel
         lea r13, (WRAPPER_EFFECT ptr [rdx + rax]).data.pos
@@ -1075,10 +1111,14 @@ particlesFor:
         mov rax, sizeof POINTF
         mul rcx
         movss xmm1, (POINTF ptr [r12 + rax]).x
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, (POINTF ptr [r13 + rax]).x
         addss xmm0, xmm1
         movss (POINTF ptr [r13 + rax]).x, xmm0
         movss xmm1, (POINTF ptr [r12 + rax]).y
+        movss xmm2, deltaTime
+        mulss xmm1, xmm2
         movss xmm0, (POINTF ptr [r13 + rax]).y
         addss xmm0, xmm1
         movss (POINTF ptr [r13 + rax]).y, xmm0
@@ -1096,8 +1136,8 @@ effectsEnd:
 skip:   lea rcx, keysPressed
         xor rdx, rdx
         mov r8, sizeof keysPressed
-        
         call memset
+
         add rsp, 28h
         ret
 Update endp
@@ -1359,9 +1399,10 @@ effectsFor:
         mov rax, sizeof WRAPPER_EFFECT
         mul rcx
         lea rdx, effects
-        mov edx, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
-        test edx, edx
-        jz @f
+        movss xmm0, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
+        xorps xmm1, xmm1
+        comiss xmm0, xmm1
+        jbe @f
         add rcx, 1
         jmp effectsFor
         ; If so, uses the inactive effect as a new effect
@@ -1371,7 +1412,8 @@ effectsFor:
         mov rax, sizeof WRAPPER_EFFECT
         mul rcx
         lea rdx, effects
-        mov (WRAPPER_EFFECT ptr [rdx + rax]).data.time, EFFECT_TIME
+        movss xmm0, EFFECT_TIME
+        movss (WRAPPER_EFFECT ptr [rdx + rax]).data.time, xmm0
         lea r12, (WRAPPER_EFFECT ptr [rdx + rax]).data.vel
         lea r13, (WRAPPER_EFFECT ptr [rdx + rax]).data.pos
         xor rcx, rcx
@@ -1747,10 +1789,8 @@ effectsFor:
         jmp effectsFor
         ; if so, draws the effect
 @@:     lea rdx, effects
-        mov edx, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
-        cvtsi2ss xmm4, edx
-        mov rdx, EFFECT_TIME
-        cvtsi2ss xmm5, rdx
+        movss xmm4, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
+        movss xmm5, EFFECT_TIME
         divss xmm4, xmm5
         mov rdx, 1
         cvtsi2ss xmm5, rdx
