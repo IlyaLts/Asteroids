@@ -88,7 +88,6 @@ glClear proto
 glBegin proto
 glEnd proto
 glVertex2f proto
-glVertex3f proto
 glVertex2d proto
 glColor3f proto
 glPointSize proto
@@ -110,6 +109,16 @@ hRC qword ?
 hDC qword ?                                    
 hWnd qword ?
 hInstance qword ?
+
+NUMDISPLAY struct 8
+        top byte ?
+        topLeft byte ?
+        topRight byte ?
+        center byte ?
+        bottomLeft byte ?
+        bottomRight byte ?
+        bottom byte ?
+NUMDISPLAY ends
 
 POINT struct 8
         x dword ?
@@ -379,6 +388,9 @@ GL_LINE_STRIP equ 3h
 GL_LINE_LOOP equ 2h
 GL_NEAR dq 0.0
 GL_FAR dq 1.0
+TEXT_COLOR_R dd 1.0
+TEXT_COLOR_G dd 1.0
+TEXT_COLOR_B dd 1.0
 BACKGROUND_COLOR_R dd 0.0
 BACKGROUND_COLOR_G dd 0.0
 BACKGROUND_COLOR_B dd 0.0
@@ -437,6 +449,22 @@ EFFECT_COLOR_B dd 1.0
 MAX_EFFECTS equ MAX_ASTEROIDS + 1
 effects WRAPPER_EFFECT MAX_EFFECTS dup ({})
 
+NUMERAL_WIDTH equ 10
+NUMERAL_HEIGHT equ 20
+SCORE dd 0
+
+numDisplayes NUMDISPLAY 10 DUP ( \
+{1, 1, 1, 0, 1, 1, 1},
+{0, 0, 1, 0, 0, 1, 0},
+{1, 0, 1, 1, 1, 0, 1},
+{1, 0, 1, 1, 0, 1, 1},
+{0, 1, 1, 1, 0, 1, 0},
+{1, 1, 0, 1, 0, 1, 1},
+{1, 1, 0, 1, 1, 1, 1},
+{1, 0, 1, 0, 0, 1, 0},
+{1, 1, 1, 1, 1, 1, 1},
+{1, 1, 1, 1, 0, 1, 1})
+
 ; Sound - Unfortunately, PlaySound doesn't support mixing sounds
 SOUND_ENABLED byte 1
 SND_FILENAME equ 20000h
@@ -478,14 +506,14 @@ WinMainCRTStartup proc
         sub rsp, 28h
 
         ; Gets the absolute path of sound files
-        mov rcx, 0
+        xor rcx, rcx
         lea rdx, absolutePath
         mov r8, PATH_SIZE
         call GetModuleFileNameA
         lea rcx, absolutePath
         mov rdx, '\\'
         call strrchr
-        mov cx, 0
+        xor cx, cx
         mov [rax + 1], cx
         lea rcx, rocketEnginePath
         lea rdx, absolutePath
@@ -608,7 +636,7 @@ Update proc
         mov al, [rax + KEY_ESCAPE]
         test al, al
         je @f
-        mov rcx, 0
+        xor rcx, rcx
         call ExitProcess
         add rsp, 28h
         ret
@@ -1017,6 +1045,14 @@ asteroidsBulletsFor:
         lea rbx, asteroids
         add rbx, rax
         mov ax, (ASTEROID ptr [rbx]).sizeType
+        ; Scoring
+        push rbx
+        mov ebx, SCORE
+        add ebx, eax
+        inc ebx
+        mov SCORE, ebx
+        pop rbx
+        ; !Scoring
         inc ax
         cmp ax, ASTEROID_SMALL
         jg breakUpDone
@@ -1048,7 +1084,7 @@ breakUpDone:
         call SpawnParticle
         lea rdx, asteroids
         lea rcx, (ASTEROID ptr [rdx + r12])
-        mov rdx, 0
+        xor rdx, rdx
         mov r8, sizeof ASTEROID
         call memset
         lea rdx, asteroids
@@ -1058,7 +1094,7 @@ breakUpDone:
         ;test al, al
         ;jz @f
         ;lea rcx, asteroidExplosionPath
-        ;mov rdx, 0
+        ;xor rdx, rdx
         ;mov r8d, SND_FLAGS
         ;call PlaySound
 ;@@:
@@ -1154,7 +1190,7 @@ Update endp
 ;================================================
 IsCollided proc
         sub rsp, 28h
-        mov rax, 0
+        xor rax, rax
 
         ; Left horizontal side < right horizontal side
         movss xmm0, (POINTF ptr [rcx]).x
@@ -1300,7 +1336,7 @@ asteroidsFor:
         jmp asteroidsFor
         ; Generates rotation
 @@:     push rcx
-        mov rcx, 0
+        xor rcx, rcx
         mov rdx, 360
         sub rsp, 28h
         call Rand
@@ -1525,28 +1561,24 @@ Draw proc
         call glColor3f
         xorps xmm0, xmm0
         cvtsi2ss xmm1, [SHIP_FORWARD_SIZE]
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         cvtsi2ss xmm0, [SHIP_SIDE_SIZE]
         mov eax, SHIP_BACKSIDE_SIZE
         neg rax
         cvtsi2ss xmm1, eax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         xorps xmm0, xmm0
         mov eax, SHIP_BACK_SIZE
         neg rax
         cvtsi2ss xmm1, eax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         mov eax, SHIP_SIDE_SIZE
         neg rax
         cvtsi2ss xmm0, eax
         mov eax, SHIP_BACKSIDE_SIZE
         neg rax
         cvtsi2ss xmm1, eax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         call glEnd
 
         ; Draws rocket engine plume
@@ -1564,20 +1596,17 @@ Draw proc
         mov eax, SHIP_BACKSIDE_SIZE
         neg rax
         cvtsi2ss xmm1, eax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         xorps xmm0, xmm0
         mov eax, SHIP_PLUME_SIZE
         neg rax
         cvtsi2ss xmm1, eax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         cvtsi2ss xmm0, SHIP_PLUME_SIDE_SIZE
         mov eax, SHIP_BACKSIDE_SIZE
         neg rax
         cvtsi2ss xmm1, eax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         call glEnd
 @@:
 noShip:
@@ -1610,10 +1639,9 @@ bulletsFor:
 @@:     lea rdx, bullets
         movss xmm0, (BULLET ptr [rdx + rax]).pos.x
         movss xmm1, (BULLET ptr [rdx + rax]).pos.y
-        xorps xmm2, xmm2
         push rcx
         sub rsp, 28h
-        call glVertex3f
+        call glVertex2f
         add rsp, 28h
         pop rcx
         inc rcx
@@ -1699,21 +1727,18 @@ sizeChosen:
         xorps xmm0, xmm0
         mov rax, rbx
         cvtsi2ss xmm1, rax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         mov rax, rbx
         shr rax, 2
         mov rcx, 3
         mul rcx
         cvtsi2ss xmm0, rax
         cvtsi2ss xmm1, rax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         mov rax, rbx
         cvtsi2ss xmm0, rax
         xorps xmm1, xmm1
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         mov rax, rbx
         shr rax, 2
         mov rcx, 3
@@ -1721,16 +1746,14 @@ sizeChosen:
         cvtsi2ss xmm0, rax
         neg rax
         cvtsi2ss xmm1, rax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         xorps xmm0, xmm0
         mov rax, rbx
         cvtsi2ss xmm1, rax
         mov eax, FLOAT_SIGN_MASK
         movd xmm2, eax
         xorps xmm1, xmm2
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         mov rax, rbx
         shr rax, 2
         mov rcx, 3
@@ -1738,16 +1761,14 @@ sizeChosen:
         neg rax
         cvtsi2ss xmm0, rax
         cvtsi2ss xmm1, rax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         mov rax, rbx
         cvtsi2ss xmm0, rax
         mov eax, FLOAT_SIGN_MASK
         movd xmm1, eax
         xorps xmm0, xmm1
         xorps xmm1, xmm1
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         mov rax, rbx
         shr rax, 2
         mov rcx, 3
@@ -1755,8 +1776,7 @@ sizeChosen:
         cvtsi2ss xmm1, rax
         neg rax
         cvtsi2ss xmm0, rax
-        xorps xmm2, xmm2
-        call glVertex3f
+        call glVertex2f
         pop rbx
         add rsp, 28h
         call glEnd
@@ -1831,10 +1851,9 @@ particlesFor:
         mul rcx
         movss xmm0, (POINTF ptr [r12 + rax]).x
         movss xmm1, (POINTF ptr [r12 + rax]).y
-        xorps xmm2, xmm2
         push rcx
         sub rsp, 28h
-        call glVertex3f
+        call glVertex2f
         add rsp, 28h
         pop rcx
         inc rcx
@@ -1847,12 +1866,274 @@ particlesForEnd:
 effectsForEnd:
         call glEnd
 
+        call PrintScore
+
         mov rcx, hDC
         call SwapBuffers
         add rsp, 28h
-        mov rax, 0
+        xor rax, rax
         ret
 Draw endp
+
+;================================================
+;   PrintScore
+;================================================
+PrintScore proc
+        sub rsp, 28h
+
+        ; Makes it print the score in the top center of the screen
+        mov eax, WINDOW_WIDTH
+        shr eax, 1
+        cvtsi2ss xmm0, eax
+        mov eax, WINDOW_HEIGHT
+        mov ecx, 6
+        xor rdx, rdx
+        div ecx
+        mov ecx, WINDOW_HEIGHT
+        sub ecx, eax
+        cvtsi2ss xmm1, ecx
+        xorps xmm2, xmm2
+        call glTranslatef
+
+        ; Prints score
+        xor rcx, rcx
+        mov ecx, SCORE
+scoreFor:
+        push rcx
+        ; Gets the least significant digit
+        mov eax, ecx
+        mov ecx, 10
+        xor rdx, rdx
+        div ecx
+        ; Prints it
+        mov rax, sizeof(NUMDISPLAY)
+        mov rcx, rdx
+        mul ecx
+        lea rcx, numDisplayes
+        lea rcx, NUMDISPLAY ptr[rcx + rax]
+        sub rsp, 18h
+        call PrintDigit
+        add rsp, 18h
+        pop rcx
+        ; Ends the loop if the number is less than 10
+        cmp ecx, 10
+        jl scoreForEnd
+        ; Moves the coordinate system to the left to accommodate the next digit
+        push rcx
+        sub rsp, 18h
+        mov eax, NUMERAL_WIDTH
+        add eax, NUMERAL_WIDTH
+        add eax, 10
+        neg eax
+        cvtsi2ss xmm0, eax
+        xorps xmm1, xmm1
+        xorps xmm2, xmm2
+        call glTranslatef
+        add rsp, 18h
+        pop rcx
+        ; Divides the number by 10
+        mov eax, ecx
+        mov ecx, 10
+        xor rdx, rdx
+        div ecx
+        mov ecx, eax
+        jmp scoreFor
+scoreForEnd:
+
+        call glLoadIdentity
+
+        add rsp, 28h
+        ret
+PrintScore endp
+
+;================================================
+;   PrintDigit
+;
+;   rcx = NUMDISPLAY - An address of NUMDISPLAY structure
+;================================================
+PrintDigit proc
+        push rbp
+        lea rbp, [rsp + 8h]
+        mov [rbp + 8h], rcx
+        sub rsp, 30h
+
+        ; Top
+        mov rdx, [rbp + 8h]
+        mov al, (NUMDISPLAY ptr [rdx]).top
+        test al, al
+        je @f
+        mov rcx, GL_LINE_STRIP
+        call glBegin
+        movd xmm0, [TEXT_COLOR_R]
+        movd xmm1, [TEXT_COLOR_G]
+        movd xmm2, [TEXT_COLOR_B]
+        call glColor3f
+        mov eax, NUMERAL_WIDTH
+        neg rax
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        mov eax, NUMERAL_WIDTH
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        call glEnd
+@@:
+
+        ; Center
+        mov rdx, [rbp + 8h]
+        mov al, (NUMDISPLAY ptr [rdx]).center
+        test al, al
+        je @f
+        mov rcx, GL_LINE_STRIP
+        call glBegin
+        movd xmm0, [TEXT_COLOR_R]
+        movd xmm1, [TEXT_COLOR_G]
+        movd xmm2, [TEXT_COLOR_B]
+        call glColor3f
+        mov eax, NUMERAL_WIDTH
+        neg rax
+        cvtsi2ss xmm0, eax
+        xorps xmm1, xmm1
+        call glVertex2f
+        mov eax, NUMERAL_WIDTH
+        cvtsi2ss xmm0, eax
+        xorps xmm1, xmm1
+        call glVertex2f
+        call glEnd
+@@:
+
+        ; Bottom
+        mov rdx, [rbp + 8h]
+        mov al, (NUMDISPLAY ptr [rdx]).bottom
+        test al, al
+        je @f
+        mov rcx, GL_LINE_STRIP
+        call glBegin
+        movd xmm0, [TEXT_COLOR_R]
+        movd xmm1, [TEXT_COLOR_G]
+        movd xmm2, [TEXT_COLOR_B]
+        call glColor3f
+        mov eax, NUMERAL_WIDTH
+        neg rax
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        neg rax
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        mov eax, NUMERAL_WIDTH
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        neg rax
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        call glEnd
+@@:
+
+        ; Top left
+        mov rdx, [rbp + 8h]
+        mov al, (NUMDISPLAY ptr [rdx]).topLeft
+        test al, al
+        je @f
+        mov rcx, GL_LINE_STRIP
+        call glBegin
+        movd xmm0, [TEXT_COLOR_R]
+        movd xmm1, [TEXT_COLOR_G]
+        movd xmm2, [TEXT_COLOR_B]
+        call glColor3f
+        mov eax, NUMERAL_WIDTH
+        neg rax
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        mov eax, NUMERAL_WIDTH
+        neg rax
+        cvtsi2ss xmm0, eax
+        xorps xmm1, xmm1
+        call glVertex2f
+        call glEnd
+@@:
+
+        ; Top right
+        mov rdx, [rbp + 8h]
+        mov al, (NUMDISPLAY ptr [rdx]).topRight
+        test al, al
+        je @f
+        mov rcx, GL_LINE_STRIP
+        call glBegin
+        movd xmm0, [TEXT_COLOR_R]
+        movd xmm1, [TEXT_COLOR_G]
+        movd xmm2, [TEXT_COLOR_B]
+        call glColor3f
+        mov eax, NUMERAL_WIDTH
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        mov eax, NUMERAL_WIDTH
+        cvtsi2ss xmm0, eax
+        xorps xmm1, xmm1
+        call glVertex2f
+        call glEnd
+@@:
+
+        ; Bottom left
+        mov rdx, [rbp + 8h]
+        mov al, (NUMDISPLAY ptr [rdx]).bottomLeft
+        test al, al
+        je @f
+        mov rcx, GL_LINE_STRIP
+        call glBegin
+        movd xmm0, [TEXT_COLOR_R]
+        movd xmm1, [TEXT_COLOR_G]
+        movd xmm2, [TEXT_COLOR_B]
+        call glColor3f
+        mov eax, NUMERAL_WIDTH
+        neg rax
+        cvtsi2ss xmm0, eax
+        xorps xmm1, xmm1
+        call glVertex2f
+        mov eax, NUMERAL_WIDTH
+        neg rax
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        neg rax
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        call glEnd
+@@:
+
+        ; Bottom right
+        mov rdx, [rbp + 8h]
+        mov al, (NUMDISPLAY ptr [rdx]).bottomRight
+        test al, al
+        je @f
+        mov rcx, GL_LINE_STRIP
+        call glBegin
+        movd xmm0, [TEXT_COLOR_R]
+        movd xmm1, [TEXT_COLOR_G]
+        movd xmm2, [TEXT_COLOR_B]
+        call glColor3f
+        mov eax, NUMERAL_WIDTH
+        cvtsi2ss xmm0, eax
+        xorps xmm1, xmm1
+        call glVertex2f
+        mov eax, NUMERAL_WIDTH
+        cvtsi2ss xmm0, eax
+        mov eax, NUMERAL_HEIGHT
+        neg rax
+        cvtsi2ss xmm1, eax
+        call glVertex2f
+        call glEnd
+@@:
+
+        add rsp, 30h
+        pop rbp
+        ret
+PrintDigit endp
 
 ;================================================
 ;   RestartGame
@@ -1861,21 +2142,29 @@ RestartGame proc
         local pos:POINTF
         sub rsp, 20h
         
-        ; Resets everything
+        ; Resets score if the ship is destroyed
+        mov al, ship.destroyed
+        test al, al
+        jz @f
+        xor rax, rax
+        mov SCORE, eax
+        @@:
+
+        ; Resets everything else
         lea rcx, ship
-        mov rdx, 0
+        xor rdx, rdx
         mov r8, sizeof ship
         call memset
         lea rcx, bullets
-        mov rdx, 0
+        xor rdx, rdx
         mov r8, sizeof bullets
         call memset
         lea rcx, asteroids
-        mov rdx, 0
+        xor rdx, rdx
         mov r8, sizeof asteroids
         call memset
         lea rcx, effects
-        mov rdx, 0
+        xor rdx, rdx
         mov r8, sizeof effects
         call memset
 
@@ -1896,7 +2185,7 @@ asteroidsFor:
         jge asteroidsForEnd
         ; Generates the x-coordinate position
         push rcx
-        mov rcx, 0
+        xor rcx, rcx
         mov edx, WINDOW_WIDTH
         sub rsp, 28h
         call Rand
@@ -1906,7 +2195,7 @@ asteroidsFor:
         movss pos.x, xmm0
         ; Generates the y-coordinate position
         push rcx
-        mov rcx, 0
+        xor rcx, rcx
         mov edx, WINDOW_HEIGHT
         sub rsp, 28h
         call Rand
@@ -2281,7 +2570,7 @@ noRCFound:
 @@:
 
         add rsp, 28h
-        mov rax, 0
+        xor rax, rax
         ret
 KillWindow endp
 
