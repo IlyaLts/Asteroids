@@ -1,7 +1,7 @@
 # Asteroids
 Asteroids video game written on x64 MASM assembly.
 
-![Asteroids_WkV9Swbz7p](https://github.com/IlyaLts/Asteroids/assets/5786770/69123d36-9362-4d6b-a723-ed0afc58d918)
+![Asteroids_ojAwmB7CMv](https://github.com/user-attachments/assets/e1339ee8-5c6d-425f-aef1-63563b85c142)
 
 ## Building
 Buildable with Visual Studio 17 or newer.
