@@ -413,7 +413,7 @@ SHIP_COLOR_B dd 1.0
 SHIP_PLUME_COLOR_R dd 1.0
 SHIP_PLUME_COLOR_G dd 0.75
 SHIP_PLUME_COLOR_B dd 0.0
-ship SHIP <0, 0>
+ship SHIP <0, 1>
 
 ; Asteroids
 ASTEROID_MAX_SPEED dd 250
@@ -2142,19 +2142,30 @@ RestartGame proc
         local pos:POINTF
         sub rsp, 20h
         
-        ; Resets score if the ship is destroyed
-        mov al, ship.destroyed
+        ; Resets score/ship if the ship is destroyed
+         mov al, ship.destroyed
         test al, al
         jz @f
+        ; Score
         xor rax, rax
         mov SCORE, eax
-        @@:
-
-        ; Resets everything else
+        ; Ship
         lea rcx, ship
         xor rdx, rdx
         mov r8, sizeof ship
         call memset
+        ; Places the ship in the center of the screen
+        mov eax, WINDOW_WIDTH
+        shr eax, 1
+        cvtsi2ss xmm0, eax
+        movss ship.pos.x, xmm0
+        mov eax, WINDOW_HEIGHT
+        shr eax, 1
+        cvtsi2ss xmm0, eax
+        movss ship.pos.y, xmm0
+        @@:
+
+        ; Resets everything else
         lea rcx, bullets
         xor rdx, rdx
         mov r8, sizeof bullets
@@ -2167,16 +2178,6 @@ RestartGame proc
         xor rdx, rdx
         mov r8, sizeof effects
         call memset
-
-        ; Places the ship in the center of the screen
-        mov eax, WINDOW_WIDTH
-        shr eax, 1
-        cvtsi2ss xmm0, eax
-        movss ship.pos.x, xmm0
-        mov eax, WINDOW_HEIGHT
-        shr eax, 1
-        cvtsi2ss xmm0, eax
-        movss ship.pos.y, xmm0
  
         ; Places asteroids randomly on the screen
         xor rcx, rcx
