@@ -1528,6 +1528,85 @@ Draw proc
         mov rcx, GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT
         call glClear
 
+        ; Draws effects
+        call glLoadIdentity
+        mov eax, EFFECT_SIZE
+        cvtsi2ss xmm0, eax
+        call glPointSize
+        mov rcx, GL_POINTS
+        call glBegin
+        xor rcx, rcx
+effectsFor:
+        cmp rcx, MAX_EFFECTS
+        jge effectsForEnd
+        mov rax, sizeof WRAPPER_EFFECT
+        mul rcx
+        lea rdx, effects
+        ; Checks if an effect has life time left
+        mov edx, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
+        test edx, edx
+        jnz @f
+        add rcx, 1
+        jmp effectsFor
+        ; if so, draws the effect
+@@:     lea rdx, effects
+        movss xmm4, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
+        movss xmm5, EFFECT_TIME
+        divss xmm4, xmm5
+        mov rdx, 1
+        cvtsi2ss xmm5, rdx
+        subss xmm5, xmm4
+        movss xmm4, xmm5
+        movd xmm0, [EFFECT_COLOR_R]
+        movd xmm5, [BACKGROUND_COLOR_R]
+        subss xmm5, xmm0
+        mulss xmm5, xmm4
+        addss xmm0, xmm5
+        movd xmm1, [EFFECT_COLOR_G]
+        movd xmm5, [BACKGROUND_COLOR_G]
+        subss xmm5, xmm1
+        mulss xmm5, xmm4
+        addss xmm1, xmm5
+        movd xmm2, [EFFECT_COLOR_B]
+        movd xmm5, [BACKGROUND_COLOR_B]
+        subss xmm5, xmm2
+        mulss xmm5, xmm4
+        addss xmm2, xmm5
+        push rcx
+        sub rsp, 28h
+        call glColor3f
+        add rsp, 28h
+        pop rcx
+        push rcx
+        push r12
+        ; Draws particles
+        mov rax, sizeof WRAPPER_EFFECT
+        mul rcx
+        lea rdx, effects
+        lea r12, (WRAPPER_EFFECT ptr [rdx + rax]).data.pos
+        xor rcx, rcx
+particlesFor:
+        cmp rcx, MAX_PARTICLES
+        jge particlesForEnd
+        mov rax, sizeof POINTF
+        mul rcx
+        movss xmm0, (POINTF ptr [r12 + rax]).x
+        movss xmm1, (POINTF ptr [r12 + rax]).y
+        push rcx
+        sub rsp, 28h
+        call glVertex2f
+        add rsp, 28h
+        pop rcx
+        inc rcx
+        jmp particlesFor
+particlesForEnd:
+        pop r12
+        pop rcx
+        inc rcx
+        jmp effectsFor
+effectsForEnd:
+        call glEnd
+
         ; Jumps over if the ship is destroyed
         mov al, ship.destroyed
         test al, al
@@ -1786,85 +1865,6 @@ asteroidsForContinue:
         inc rcx
         jmp asteroidsFor
 asteroidsForEnd:
-    
-        ; Draws effects
-        call glLoadIdentity
-        mov eax, EFFECT_SIZE
-        cvtsi2ss xmm0, eax
-        call glPointSize
-        mov rcx, GL_POINTS
-        call glBegin
-        xor rcx, rcx
-effectsFor:
-        cmp rcx, MAX_EFFECTS
-        jge effectsForEnd
-        mov rax, sizeof WRAPPER_EFFECT
-        mul rcx
-        lea rdx, effects
-        ; Checks if an effect has life time left
-        mov edx, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
-        test edx, edx
-        jnz @f
-        add rcx, 1
-        jmp effectsFor
-        ; if so, draws the effect
-@@:     lea rdx, effects
-        movss xmm4, (WRAPPER_EFFECT ptr [rdx + rax]).data.time
-        movss xmm5, EFFECT_TIME
-        divss xmm4, xmm5
-        mov rdx, 1
-        cvtsi2ss xmm5, rdx
-        subss xmm5, xmm4
-        movss xmm4, xmm5
-        movd xmm0, [EFFECT_COLOR_R]
-        movd xmm5, [BACKGROUND_COLOR_R]
-        subss xmm5, xmm0
-        mulss xmm5, xmm4
-        addss xmm0, xmm5
-        movd xmm1, [EFFECT_COLOR_G]
-        movd xmm5, [BACKGROUND_COLOR_G]
-        subss xmm5, xmm1
-        mulss xmm5, xmm4
-        addss xmm1, xmm5
-        movd xmm2, [EFFECT_COLOR_B]
-        movd xmm5, [BACKGROUND_COLOR_B]
-        subss xmm5, xmm2
-        mulss xmm5, xmm4
-        addss xmm2, xmm5
-        push rcx
-        sub rsp, 28h
-        call glColor3f
-        add rsp, 28h
-        pop rcx
-        push rcx
-        push r12
-        ; Draws particles
-        mov rax, sizeof WRAPPER_EFFECT
-        mul rcx
-        lea rdx, effects
-        lea r12, (WRAPPER_EFFECT ptr [rdx + rax]).data.pos
-        xor rcx, rcx
-particlesFor:
-        cmp rcx, MAX_PARTICLES
-        jge particlesForEnd
-        mov rax, sizeof POINTF
-        mul rcx
-        movss xmm0, (POINTF ptr [r12 + rax]).x
-        movss xmm1, (POINTF ptr [r12 + rax]).y
-        push rcx
-        sub rsp, 28h
-        call glVertex2f
-        add rsp, 28h
-        pop rcx
-        inc rcx
-        jmp particlesFor
-particlesForEnd:
-        pop r12
-        pop rcx
-        inc rcx
-        jmp effectsFor
-effectsForEnd:
-        call glEnd
 
         call PrintScore
 
@@ -1880,6 +1880,8 @@ Draw endp
 ;================================================
 PrintScore proc
         sub rsp, 28h
+
+        call glLoadIdentity
 
         ; Makes it print the score in the top center of the screen
         mov eax, WINDOW_WIDTH
