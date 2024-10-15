@@ -428,7 +428,8 @@ ASTEROID_SMALL equ 2
 ASTEROID_BIG_SIZE equ 40
 ASTEROID_MIDDLE_SIZE equ 25
 ASTEROID_SMALL_SIZE equ 12
-ASTEROIDS_ON_START dd 3
+ASTEROIDS_ON_START equ 3
+ASTEROIDS_ON_RESTART dd 3
 MAX_BIG_ASTEROIDS equ 10
 MAX_ASTEROIDS equ MAX_BIG_ASTEROIDS * 2 * 3
 asteroids ASTEROID MAX_ASTEROIDS dup ({0, 0.0, 0.0})
@@ -666,10 +667,10 @@ Update proc
         test dl, dl
         jz @b
         jmp noRestartNeeded
-@@:     inc ASTEROIDS_ON_START
-        cmp ASTEROIDS_ON_START, MAX_BIG_ASTEROIDS
+@@:     inc ASTEROIDS_ON_RESTART
+        cmp ASTEROIDS_ON_RESTART, MAX_BIG_ASTEROIDS
         jle @f
-        mov ASTEROIDS_ON_START, MAX_BIG_ASTEROIDS
+        mov ASTEROIDS_ON_RESTART, MAX_BIG_ASTEROIDS
 @@:     call RestartGame
 noRestartNeeded:
 
@@ -2148,6 +2149,8 @@ RestartGame proc
          mov al, ship.destroyed
         test al, al
         jz @f
+        mov eax, ASTEROIDS_ON_START
+        mov ASTEROIDS_ON_RESTART, eax
         ; Score
         xor rax, rax
         mov SCORE, eax
@@ -2184,7 +2187,7 @@ RestartGame proc
         ; Places asteroids randomly on the screen
         xor rcx, rcx
 asteroidsFor:
-        cmp ecx, ASTEROIDS_ON_START
+        cmp ecx, ASTEROIDS_ON_RESTART
         jge asteroidsForEnd
         ; Generates the x-coordinate position
         push rcx
